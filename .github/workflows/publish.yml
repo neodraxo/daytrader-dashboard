@@ -1,0 +1,74 @@
+# Builds the dashboard from the two private repos, encrypts it with a password (StaticCrypt),
+# and publishes only the encrypted page to GitHub Pages.
+#
+# Needs two repository secrets in daytrader-dashboard:
+#   SOURCE_TOKEN        fine-grained token, read-only "Contents" on neodraxo/daytrader and neodraxo/recorder-status
+#   DASHBOARD_PASSWORD  the page password
+# The logs of a public repo are public: no step prints data or secrets.
+name: Publish dashboard
+
+on:
+  schedule:
+    - cron: "20 0,6,12,18 * * *"   # 15 minutes after the VM publishes its status (UTC)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Get builder and progress file (private)
+        uses: actions/checkout@v4
+        with:
+          repository: neodraxo/daytrader
+          token: ${{ secrets.SOURCE_TOKEN }}
+          path: daytrader
+          sparse-checkout: dashboard
+          persist-credentials: false
+
+      - name: Get recorder status (private)
+        uses: actions/checkout@v4
+        with:
+          repository: neodraxo/recorder-status
+          token: ${{ secrets.SOURCE_TOKEN }}
+          path: status
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build page
+        run: python3 daytrader/dashboard/build.py --status status --progress daytrader/dashboard/progress.json --out build/index.html
+
+      - name: Encrypt page
+        env:
+          PW: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: |
+          test -n "$PW" || { echo "DASHBOARD_PASSWORD secret is missing"; exit 1; }
+          npx --yes staticcrypt@3 build/index.html -p "$PW" -d site --template-title "DayTrader status" > /dev/null
+          printf 'User-agent: *\nDisallow: /\n' > site/robots.txt
+
+      - name: Refuse to publish anything unencrypted
+        run: |
+          test -f site/index.html
+          if grep -q "project status" site/index.html; then echo "plaintext found, aborting"; exit 1; fi
+          test "$(ls site | sort | tr '\n' ' ')" = "index.html robots.txt "
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
