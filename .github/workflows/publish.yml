@@ -1,4 +1,4 @@
-# Builds the dashboard from the two private repos, encrypts it with a password (StaticCrypt),
+# Builds the dashboard from the two private repos, encrypts it with a password (StatiCrypt),
 # and publishes only the encrypted page to GitHub Pages.
 #
 # Needs two repository secrets in daytrader-dashboard:
@@ -29,7 +29,7 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Get builder and progress file (private)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: neodraxo/daytrader
           token: ${{ secrets.SOURCE_TOKEN }}
@@ -38,14 +38,14 @@ jobs:
           persist-credentials: false
 
       - name: Get recorder status (private)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: neodraxo/recorder-status
           token: ${{ secrets.SOURCE_TOKEN }}
           path: status
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -57,7 +57,7 @@ jobs:
           PW: ${{ secrets.DASHBOARD_PASSWORD }}
         run: |
           test -n "$PW" || { echo "DASHBOARD_PASSWORD secret is missing"; exit 1; }
-          npx --yes staticcrypt@3 build/index.html -p "$PW" -d site --template-title "DayTrader status" > /dev/null
+          npx --yes staticrypt@3 build/index.html -p "$PW" -d site --template-title "DayTrader status" > /dev/null
           printf 'User-agent: *\nDisallow: /\n' > site/robots.txt
 
       - name: Refuse to publish anything unencrypted
