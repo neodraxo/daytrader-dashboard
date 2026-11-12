@@ -57,7 +57,11 @@ jobs:
           PW: ${{ secrets.DASHBOARD_PASSWORD }}
         run: |
           test -n "$PW" || { echo "DASHBOARD_PASSWORD secret is missing"; exit 1; }
-          npx --yes staticrypt@3 build/index.html -p "$PW" -d site --template-title "DayTrader status" > /dev/null
+          # StatiCrypt asks for confirmation on passwords under 14 characters; with no terminal
+          # it silently gives up. Fail with a clear message instead (the password is never printed).
+          if [ "${#PW}" -lt 14 ]; then echo "DASHBOARD_PASSWORD is shorter than 14 characters; use a longer passphrase"; exit 1; fi
+          npx --yes staticrypt@3 build/index.html -p "$PW" -d site --template-title "DayTrader status" < /dev/null
+          test -f site/index.html || { echo "StatiCrypt produced no site/index.html"; ls -R site 2>/dev/null; exit 1; }
           printf 'User-agent: *\nDisallow: /\n' > site/robots.txt
 
       - name: Refuse to publish anything unencrypted
